@@ -121,11 +121,20 @@ function detectFileType(fileUrl?: string | null, fileType?: string | null) {
 ───────────────────────────────────────────────────────────────── */
 type ViewerStage = "native" | "gdocs" | "failed";
 
+
 function PDFViewer({ url, title }: { url: string; title: string }) {
   const [stage,  setStage]  = useState<ViewerStage>("native");
   const [loaded, setLoaded] = useState(false);
 
+  // For Cloudinary: ensure the URL is the direct resource URL
+  // Google Docs Viewer wraps it as a fallback
   const gdocsUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
+
+  // For native: if Cloudinary, swap /raw/upload/ → /image/upload/ so
+  // browser treats it as inline PDF, not a download
+  const nativeUrl = url.includes("cloudinary.com") && url.includes("/raw/upload/")
+    ? url.replace("/raw/upload/", "/image/upload/")
+    : url;
 
   const advanceStage = () => {
     setLoaded(false);
@@ -140,7 +149,7 @@ function PDFViewer({ url, title }: { url: string; title: string }) {
         </div>
         <div className="text-center space-y-1">
           <p className="text-sm font-semibold text-foreground">Preview unavailable</p>
-          <p className="text-xs text-muted-foreground">Download the file or open it directly.</p>
+          <p className="text-xs text-muted-foreground">Download the file to view it.</p>
         </div>
         <a
           href={url}
@@ -154,11 +163,10 @@ function PDFViewer({ url, title }: { url: string; title: string }) {
     );
   }
 
-  const src = stage === "native" ? url : gdocsUrl;
+  const src = stage === "native" ? nativeUrl : gdocsUrl;
 
   return (
     <div className="relative border-t border-border bg-muted/10">
-      {/* Spinner overlay — hidden once iframe fires onLoad */}
       {!loaded && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-muted/20 min-h-[200px]">
           <Loader2 className="h-7 w-7 animate-spin text-muted-foreground/50" />
@@ -168,18 +176,19 @@ function PDFViewer({ url, title }: { url: string; title: string }) {
         </div>
       )}
       <iframe
-        key={stage}   /* remount on stage change so onLoad fires fresh */
+        key={stage}
         src={src}
         title={title}
         className="w-full h-[680px]"
         onLoad={() => setLoaded(true)}
         onError={advanceStage}
-        // Allow GDocs viewer scripts to run
         sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
       />
     </div>
   );
 }
+
+ 
 
 /* ─── Skeleton ───────────────────────────────────────────────── */
 function PaperDetailSkeleton() {
@@ -607,16 +616,15 @@ const handleDownload = async () => {
           <CardTitle className="text-base flex items-center gap-2 text-foreground">
             <Eye className="h-4 w-4 text-muted-foreground" /> Preview
           </CardTitle>
-          {isPdf && (
-            <a
-              href={paper.fileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-muted text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Eye className="h-3.5 w-3.5" /> Open in new tab
-            </a>
-          )}
+         {/* Inside the Preview Card header — replace the <a> tag */}
+{isPdf && (
+  <button
+    onClick={() => window.open(paper.fileUrl, "_blank", "noopener,noreferrer")}
+    className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-muted text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+  >
+    <Eye className="h-3.5 w-3.5" /> Open in new tab
+  </button>
+)}
         </CardHeader>
 
         <CardContent className="p-0">
