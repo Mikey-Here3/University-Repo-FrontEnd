@@ -46,21 +46,30 @@ type EditForm = {
   contentType: ContentType;
 };
 
-/* ─── Download helper ────────────────────────────────────────────
-   Problem 1: fl_attachment URL manipulation breaks signed Cloudinary URLs.
-   Problem 2: Cross-origin <a download> is blocked by browsers silently.
-   Fix: fetch() the blob first, create an objectURL, then click it.
-   Fallback: window.open if CORS blocks the fetch.
+/* ─── Cloudinary inline URL ──────────────────────────────────────
+   Injects fl_inline so Cloudinary serves Content-Disposition:inline
+   instead of attachment — required for both preview and new tab.
 ───────────────────────────────────────────────────────────────── */
+function toInlineUrl(url: string): string {
+  if (!url.includes("cloudinary.com")) return url;
+  // Avoid double-injecting
+  if (url.includes("fl_inline")) return url;
+  return url.replace("/upload/", "/upload/fl_inline/");
+}
+
+/* ─── Open PDF in new tab ────────────────────────────────────── */
+function openPdfInNewTab(url: string) {
+  window.open(toInlineUrl(url), "_blank", "noopener,noreferrer");
+}
+
+/* ─── Download helper ────────────────────────────────────────── */
 async function triggerDownload(
   url: string,
   filename: string,
   fileType?: string | null,
 ): Promise<void> {
-  // Build a clean filename with the correct extension
-  const ext      = (fileType ?? "").toLowerCase().trim();           // e.g. "pdf"
+  const ext      = (fileType ?? "").toLowerCase().trim();
   const baseName = filename.replace(/[^a-z0-9.\-_\s]/gi, "_").trim() || "download";
-  // Only append extension if the baseName doesn't already end with it
   const fullName = ext && !baseName.toLowerCase().endsWith(`.${ext}`)
     ? `${baseName}.${ext}`
     : baseName;
@@ -70,54 +79,43 @@ async function triggerDownload(
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const blob      = await res.blob();
     const objectUrl = URL.createObjectURL(blob);
-
     const a         = document.createElement("a");
     a.href          = objectUrl;
-    a.download      = fullName;          // ← correct filename + extension
+    a.download      = fullName;
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-
     setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
   } catch {
-    // CORS fallback — open directly, browser will prompt Save As
     window.open(url, "_blank", "noopener,noreferrer");
     toast.info("If download didn't start, right-click → Save As.");
   }
 }
 
 /* ─── File-type detection ────────────────────────────────────── */
-// ─── File-type detection ────────────────────────────────────────
 function detectFileType(fileUrl?: string | null, fileType?: string | null) {
   const type     = (fileType ?? "").toLowerCase().trim();
   const url      = (fileUrl  ?? "").toLowerCase();
-  const cleanUrl = url.split("?")[0]; // strip query params
+  const cleanUrl = url.split("?")[0];
 
-  // Primary: trust the stored fileType from DB
-  if (type === "pdf")  return { isPdf: true,  isImage: false };
+  if (type === "pdf") return { isPdf: true,  isImage: false };
   if (["png","jpg","jpeg","gif","webp","svg"].includes(type))
-                       return { isPdf: false, isImage: true  };
+                      return { isPdf: false, isImage: true  };
 
-  // Fallback: check URL extension (works for non-Cloudinary hosts)
   const isPdf   = cleanUrl.endsWith(".pdf");
   const isImage = /\.(png|jpe?g|gif|webp|svg)$/.test(cleanUrl);
   return { isPdf, isImage };
 }
 
 /* ─── PDF Viewer ─────────────────────────────────────────────────
-   Problem: Google Docs Viewer fires onLoad even when it fails to
-   render, so we can't detect failure via onLoad alone.
+   Stage "gdocs"  → Google Docs Viewer with fl_inline Cloudinary URL
+   Stage "direct" → raw fl_inline URL directly in iframe
+   Stage "failed" → manual fallback UI
 
-   Strategy:
-   • Stage 1 — try native <iframe> with the raw URL (works if
-     Cloudinary does NOT send X-Frame-Options: SAMEORIGIN for this file).
-   • Stage 2 — fall back to Google Docs Viewer if native errors.
-   • Stage 3 — show a manual fallback UI if GDocs also errors.
-
-   Key fix: add key={stage} so React fully remounts the iframe
-   when we switch stages instead of just changing src (which
-   doesn't reliably re-trigger onLoad/onError).
+   Google Docs Viewer always fires onLoad (even on failure), so we
+   start there. The iframe key={stage} forces a full remount on
+   stage change so onLoad fires fresh.
 ───────────────────────────────────────────────────────────────── */
 type ViewerStage = "gdocs" | "direct" | "failed";
 
@@ -125,19 +123,12 @@ function PDFViewer({ url, title }: { url: string; title: string }) {
   const [stage,  setStage]  = useState<ViewerStage>("gdocs");
   const [loaded, setLoaded] = useState(false);
 
-  // Force Cloudinary to serve inline instead of as attachment
-  const inlineUrl = url.includes("cloudinary.com")
-    ? url.replace("/upload/", "/upload/fl_inline/")
-    : url;
-
-  const gdocsUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(inlineUrl)}&embedded=true`;
+  const inlineUrl = toInlineUrl(url);   // fl_inline Cloudinary URL
+  const gdocsUrl  = `https://docs.google.com/viewer?url=${encodeURIComponent(inlineUrl)}&embedded=true`;
 
   const advanceStage = () => {
     setLoaded(false);
-    setStage((s) => {
-      if (s === "gdocs")  return "direct";
-      return "failed";
-    });
+    setStage((s) => s === "gdocs" ? "direct" : "failed");
   };
 
   if (stage === "failed") {
@@ -148,9 +139,7 @@ function PDFViewer({ url, title }: { url: string; title: string }) {
         </div>
         <div className="text-center space-y-1">
           <p className="text-sm font-semibold text-foreground">Preview unavailable</p>
-          <p className="text-xs text-muted-foreground">
-            The file cannot be previewed in browser.
-          </p>
+          <p className="text-xs text-muted-foreground">Download the file to view it.</p>
         </div>
         <button
           onClick={() => openPdfInNewTab(url)}
@@ -161,24 +150,16 @@ function PDFViewer({ url, title }: { url: string; title: string }) {
       </div>
     );
   }
-/* ─── Open PDF in new tab ────────────────────────────────────────
-   "Open in new tab" on Cloudinary raw URLs triggers a download
-   instead of opening in browser. Fix: use fl_inline transformation
-   to force browser inline rendering, then open that URL.
-───────────────────────────────────────────────────────────────── */
-function openPdfInNewTab(url: string) {
-  // For Cloudinary: inject fl_inline so browser renders instead of downloading
-  const viewUrl = url.includes("cloudinary.com")
-    ? url.replace("/upload/", "/upload/fl_inline/")
-    : url;
-  window.open(viewUrl, "_blank", "noopener,noreferrer");
-}
+
   const src = stage === "gdocs" ? gdocsUrl : inlineUrl;
 
   return (
     <div className="relative border-t border-border bg-muted/10">
       {!loaded && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-muted/20" style={{ minHeight: 200 }}>
+        <div
+          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-muted/20"
+          style={{ minHeight: 200 }}
+        >
           <Loader2 className="h-7 w-7 animate-spin text-muted-foreground/50" />
           <p className="text-[13px] text-muted-foreground">
             {stage === "gdocs" ? "Loading preview…" : "Trying direct viewer…"}
@@ -197,8 +178,6 @@ function openPdfInNewTab(url: string) {
     </div>
   );
 }
-
- 
 
 /* ─── Skeleton ───────────────────────────────────────────────── */
 function PaperDetailSkeleton() {
@@ -326,14 +305,12 @@ export default function PaperDetailPage({
   const [deleteOpen,  setDeleteOpen]  = useState(false);
   const [downloading, setDownloading] = useState(false);
 
-  /* ── Query ── */
   const { data: paper, isLoading, isError } = useQuery({
     queryKey: ["paper", id],
     queryFn:  () => paperService.getById(id),
     enabled:  !!id,
   });
 
-  /* ── Mutations ── */
   const { mutate: updatePaper, isPending: updating } = useMutation({
     mutationFn: (data: Partial<EditForm>) => adminService.updatePaper(id, data),
     onSuccess: () => {
@@ -362,7 +339,6 @@ export default function PaperDetailPage({
     onError: (e) => toast.error(getApiError(e)),
   });
 
-  /* ── Helpers ── */
   const openEdit = () => {
     if (!paper) return;
     setEditForm({
@@ -374,20 +350,17 @@ export default function PaperDetailPage({
     setEditOpen(true);
   };
 
-  /* ── Download ── */
- // In handleDownload:
-const handleDownload = async () => {
-  if (!paper?.fileUrl || downloading) return;
-  setDownloading(true);
-  paperService.download(paper.id).catch(() => {});
-  try {
-    await triggerDownload(paper.fileUrl, paper.title, paper.fileType); // ← added paper.fileType
-  } finally {
-    setDownloading(false);
-  }
-};
+  const handleDownload = async () => {
+    if (!paper?.fileUrl || downloading) return;
+    setDownloading(true);
+    paperService.download(paper.id).catch(() => {});
+    try {
+      await triggerDownload(paper.fileUrl, paper.title, paper.fileType);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
-  /* ── Render guards ── */
   if (isLoading) return <PaperDetailSkeleton />;
 
   if (isError || !paper) {
@@ -406,7 +379,6 @@ const handleDownload = async () => {
 
   const { isPdf, isImage } = detectFileType(paper.fileUrl, paper.fileType);
 
-  /* ── JSX ── */
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -435,7 +407,6 @@ const handleDownload = async () => {
             className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 to-violet-50/60 p-4"
           >
             <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-primary via-violet-400 to-indigo-400 opacity-60" />
-
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
@@ -455,7 +426,6 @@ const handleDownload = async () => {
                   </p>
                 </div>
               </div>
-
               <div className="flex items-center gap-2">
                 {paper.status !== "APPROVED" && (
                   <motion.button
@@ -470,7 +440,6 @@ const handleDownload = async () => {
                     Approve
                   </motion.button>
                 )}
-
                 <motion.button
                   whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                   onClick={openEdit}
@@ -478,7 +447,6 @@ const handleDownload = async () => {
                 >
                   <Pencil className="h-3.5 w-3.5" /> Edit
                 </motion.button>
-
                 <motion.button
                   whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                   onClick={() => setDeleteOpen(true)}
@@ -495,11 +463,9 @@ const handleDownload = async () => {
       {/* ── Header Card ── */}
       <Card className="overflow-hidden border-border shadow-sm">
         <div className="h-[2px] bg-gradient-to-r from-primary via-violet-400 to-indigo-400 opacity-80" />
-
         <CardHeader className="pb-4">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
             <div className="space-y-3 flex-1 min-w-0">
-              {/* Badges */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className={cn(
                   "px-2.5 py-0.5 rounded-full text-[11px] font-semibold border",
@@ -517,18 +483,14 @@ const handleDownload = async () => {
                   <Calendar className="h-3 w-3" /> {paper.year}
                 </span>
               </div>
-
               <CardTitle className="text-2xl md:text-3xl leading-tight text-foreground">
                 {paper.title}
               </CardTitle>
-
               {paper.description && (
                 <p className="text-[14px] text-muted-foreground leading-relaxed">
                   {paper.description}
                 </p>
               )}
-
-              {/* Stats */}
               <div className="flex flex-wrap items-center gap-4 pt-1">
                 <StatBadge icon={Download} value={paper.downloads ?? 0} label="downloads" />
                 {paper.ratingAverage != null && (
@@ -546,8 +508,6 @@ const handleDownload = async () => {
                 )}
               </div>
             </div>
-
-            {/* Action buttons */}
             <div className="flex flex-wrap gap-2 shrink-0">
               <motion.button
                 whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
@@ -566,7 +526,6 @@ const handleDownload = async () => {
                   : <Download className="h-4 w-4" />}
                 {downloading ? "Downloading…" : "Download"}
               </motion.button>
-
               {isAuthenticated && (
                 <>
                   <BookmarkButton paperId={paper.id} />
@@ -576,19 +535,14 @@ const handleDownload = async () => {
             </div>
           </div>
         </CardHeader>
-
         <Separator />
-
         <CardContent className="pt-5 space-y-5">
-          {/* Meta grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/40 rounded-2xl border border-border/60">
             <MetaItem icon={BookOpen}      label="Course"      value={paper.course?.name}     />
             <MetaItem icon={GraduationCap} label="Program"     value={paper.program?.name}    />
             <MetaItem icon={Building2}     label="Department"  value={paper.department?.name} />
             <MetaItem icon={User}          label="Uploaded by" value={paper.uploadedBy?.name} />
           </div>
-
-          {/* Detail row */}
           <div className="flex flex-wrap gap-x-6 gap-y-2.5">
             <DetailItem icon={User}     label="Teacher"  value={paper.teacherName} />
             <DetailItem icon={Hash}     label="Semester" value={paper.semester} />
@@ -596,14 +550,10 @@ const handleDownload = async () => {
             <DetailItem
               icon={Eye}
               label="Size"
-              value={paper.fileSize
-                ? `${(paper.fileSize / 1024 / 1024).toFixed(2)} MB`
-                : null}
+              value={paper.fileSize ? `${(paper.fileSize / 1024 / 1024).toFixed(2)} MB` : null}
             />
             <DetailItem icon={Clock} label="Uploaded" value={formatDate(paper.createdAt)} />
           </div>
-
-          {/* Tags */}
           {paper.tags?.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 pt-1">
               <Tag className="h-3.5 w-3.5 text-muted-foreground/60" />
@@ -626,21 +576,21 @@ const handleDownload = async () => {
           <CardTitle className="text-base flex items-center gap-2 text-foreground">
             <Eye className="h-4 w-4 text-muted-foreground" /> Preview
           </CardTitle>
-         {/* Inside the Preview Card header — replace the <a> tag */}
-{isPdf && (
-  <button
-    onClick={() => window.open(paper.fileUrl, "_blank", "noopener,noreferrer")}
-    className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-muted text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors"
-  >
-    <Eye className="h-3.5 w-3.5" /> Open in new tab
-  </button>
-)}
+          {/* ✅ Uses openPdfInNewTab() with fl_inline — not raw URL */}
+          {isPdf && paper.fileUrl && (
+            <button
+              onClick={() => openPdfInNewTab(paper.fileUrl!)}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-border bg-muted text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <Eye className="h-3.5 w-3.5" /> Open in new tab
+            </button>
+          )}
         </CardHeader>
-
         <CardContent className="p-0">
-          {isPdf ? (
+          {isPdf && paper.fileUrl ? (
+            /* ✅ PDFViewer defined at module level — no scope issue */
             <PDFViewer url={paper.fileUrl} title={paper.title} />
-          ) : isImage ? (
+          ) : isImage && paper.fileUrl ? (
             <div className="flex justify-center p-6 bg-muted/20 border-t border-border">
               <img
                 src={paper.fileUrl}
@@ -698,7 +648,6 @@ const handleDownload = async () => {
               <Pencil className="h-4 w-4 text-primary" /> Edit Paper
             </DialogTitle>
           </DialogHeader>
-
           <div className="space-y-4 pt-1">
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-foreground/70">Title</label>
@@ -708,7 +657,6 @@ const handleDownload = async () => {
                 placeholder="Paper title"
               />
             </div>
-
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-foreground/70">
                 Description <span className="text-muted-foreground/50">(optional)</span>
@@ -725,7 +673,6 @@ const handleDownload = async () => {
                 )}
               />
             </div>
-
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-[12px] font-semibold text-foreground/70">Year</label>
@@ -752,7 +699,6 @@ const handleDownload = async () => {
                 </Select>
               </div>
             </div>
-
             <div className="flex gap-2 pt-2 border-t border-border">
               <button
                 onClick={() => setEditOpen(false)}
@@ -760,7 +706,6 @@ const handleDownload = async () => {
               >
                 Cancel
               </button>
-
               <button
                 onClick={() => updatePaper(editForm)}
                 disabled={!editForm.title.trim() || updating}
@@ -771,15 +716,11 @@ const handleDownload = async () => {
                   : <Pencil className="h-3.5 w-3.5" />}
                 Save
               </button>
-
               {paper.status !== "APPROVED" && (
                 <button
                   onClick={() => {
                     updatePaper(editForm, {
-                      onSuccess: () => {
-                        approvePaper();
-                        setEditOpen(false);
-                      },
+                      onSuccess: () => { approvePaper(); setEditOpen(false); },
                     });
                   }}
                   disabled={!editForm.title.trim() || updating || approving}
