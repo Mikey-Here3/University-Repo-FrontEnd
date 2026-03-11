@@ -38,13 +38,136 @@ import {
 
 const E = [0.22, 1, 0.36, 1] as const;
 
-/* ─── edit form type ─────────────────────────────────────────── */
+/* ─── Types ──────────────────────────────────────────────────── */
 type EditForm = {
   title:       string;
   description: string;
   year:        number;
   contentType: ContentType;
 };
+
+/* ─── Download helper ────────────────────────────────────────────
+   Problem 1: fl_attachment URL manipulation breaks signed Cloudinary URLs.
+   Problem 2: Cross-origin <a download> is blocked by browsers silently.
+   Fix: fetch() the blob first, create an objectURL, then click it.
+   Fallback: window.open if CORS blocks the fetch.
+───────────────────────────────────────────────────────────────── */
+async function triggerDownload(url: string, filename: string): Promise<void> {
+  // Sanitize filename — keep extension if present
+  const safeName = filename.replace(/[^a-z0-9.\-_\s]/gi, "_").trim() || "download";
+
+  try {
+    const res = await fetch(url, { mode: "cors" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const blob      = await res.blob();
+    const objectUrl = URL.createObjectURL(blob);
+
+    const a     = document.createElement("a");
+    a.href      = objectUrl;
+    a.download  = safeName;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    // Clean up object URL after browser has had time to start the download
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
+  } catch {
+    // CORS fallback — browser will open in new tab; user can Save As
+    window.open(url, "_blank", "noopener,noreferrer");
+    toast.info("If download didn't start, use the browser's Save As option.");
+  }
+}
+
+/* ─── File-type detection ────────────────────────────────────── */
+function detectFileType(fileUrl?: string, fileType?: string) {
+  const url  = (fileUrl  ?? "").toLowerCase();
+  const type = (fileType ?? "").toLowerCase();
+
+  // Strip Cloudinary query params before checking extension
+  const cleanUrl = url.split("?")[0];
+
+  const isPdf   = cleanUrl.endsWith(".pdf") || type === "pdf";
+  const isImage = /\.(png|jpe?g|gif|webp|svg)$/.test(cleanUrl) ||
+                  ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(type);
+  return { isPdf, isImage };
+}
+
+/* ─── PDF Viewer ─────────────────────────────────────────────────
+   Problem: Google Docs Viewer fires onLoad even when it fails to
+   render, so we can't detect failure via onLoad alone.
+
+   Strategy:
+   • Stage 1 — try native <iframe> with the raw URL (works if
+     Cloudinary does NOT send X-Frame-Options: SAMEORIGIN for this file).
+   • Stage 2 — fall back to Google Docs Viewer if native errors.
+   • Stage 3 — show a manual fallback UI if GDocs also errors.
+
+   Key fix: add key={stage} so React fully remounts the iframe
+   when we switch stages instead of just changing src (which
+   doesn't reliably re-trigger onLoad/onError).
+───────────────────────────────────────────────────────────────── */
+type ViewerStage = "native" | "gdocs" | "failed";
+
+function PDFViewer({ url, title }: { url: string; title: string }) {
+  const [stage,  setStage]  = useState<ViewerStage>("native");
+  const [loaded, setLoaded] = useState(false);
+
+  const gdocsUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
+
+  const advanceStage = () => {
+    setLoaded(false);
+    setStage((s) => (s === "native" ? "gdocs" : "failed"));
+  };
+
+  if (stage === "failed") {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 border-t border-border bg-muted/20 gap-4">
+        <div className="w-16 h-16 rounded-2xl bg-muted border border-border flex items-center justify-center">
+          <FileText className="h-8 w-8 text-muted-foreground/30" />
+        </div>
+        <div className="text-center space-y-1">
+          <p className="text-sm font-semibold text-foreground">Preview unavailable</p>
+          <p className="text-xs text-muted-foreground">Download the file or open it directly.</p>
+        </div>
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 h-8 px-4 rounded-lg border border-border bg-card text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <Eye className="h-3.5 w-3.5" /> Open PDF in new tab
+        </a>
+      </div>
+    );
+  }
+
+  const src = stage === "native" ? url : gdocsUrl;
+
+  return (
+    <div className="relative border-t border-border bg-muted/10">
+      {/* Spinner overlay — hidden once iframe fires onLoad */}
+      {!loaded && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-muted/20 min-h-[200px]">
+          <Loader2 className="h-7 w-7 animate-spin text-muted-foreground/50" />
+          <p className="text-[13px] text-muted-foreground">
+            {stage === "native" ? "Loading preview…" : "Trying alternate viewer…"}
+          </p>
+        </div>
+      )}
+      <iframe
+        key={stage}   /* remount on stage change so onLoad fires fresh */
+        src={src}
+        title={title}
+        className="w-full h-[680px]"
+        onLoad={() => setLoaded(true)}
+        onError={advanceStage}
+        // Allow GDocs viewer scripts to run
+        sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+      />
+    </div>
+  );
+}
 
 /* ─── Skeleton ───────────────────────────────────────────────── */
 function PaperDetailSkeleton() {
@@ -108,7 +231,8 @@ function DetailItem({ icon: Icon, label, value }: {
     <div className="flex items-center gap-2 text-sm text-muted-foreground">
       <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
       <span>
-        <span className="font-semibold text-foreground">{label}: </span>{value}
+        <span className="font-semibold text-foreground">{label}: </span>
+        {value}
       </span>
     </div>
   );
@@ -127,7 +251,7 @@ function StatBadge({ icon: Icon, value, label }: {
   );
 }
 
-/* ─── Styled input ───────────────────────────────────────────── */
+/* ─── StyledInput ────────────────────────────────────────────── */
 function StyledInput({
   value, onChange, placeholder, type = "text",
 }: {
@@ -149,35 +273,36 @@ function StyledInput({
   );
 }
 
-/* ─── Page ───────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════
+   PAGE
+═══════════════════════════════════════════════════════════════ */
 export default function PaperDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id }              = use(params);
+  const { id }                    = use(params);
   const { user, isAuthenticated } = useAuthStore();
-  const isAdmin             = user?.role === "ADMIN";
-  const router              = useRouter();
-  const qc                  = useQueryClient();
+  const isAdmin                   = user?.role === "ADMIN";
+  const router                    = useRouter();
+  const qc                        = useQueryClient();
 
-  /* edit dialog state */
-  const [editOpen,  setEditOpen]  = useState(false);
-  const [editForm,  setEditForm]  = useState<EditForm>({
+  const [editOpen,    setEditOpen]    = useState(false);
+  const [editForm,    setEditForm]    = useState<EditForm>({
     title: "", description: "", year: new Date().getFullYear(),
     contentType: "PAST_PAPER" as ContentType,
   });
+  const [deleteOpen,  setDeleteOpen]  = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
-  /* delete state */
-  const [deleteOpen, setDeleteOpen] = useState(false);
-
+  /* ── Query ── */
   const { data: paper, isLoading, isError } = useQuery({
     queryKey: ["paper", id],
     queryFn:  () => paperService.getById(id),
     enabled:  !!id,
   });
 
-  /* Admin mutations */
+  /* ── Mutations ── */
   const { mutate: updatePaper, isPending: updating } = useMutation({
     mutationFn: (data: Partial<EditForm>) => adminService.updatePaper(id, data),
     onSuccess: () => {
@@ -206,6 +331,7 @@ export default function PaperDetailPage({
     onError: (e) => toast.error(getApiError(e)),
   });
 
+  /* ── Helpers ── */
   const openEdit = () => {
     if (!paper) return;
     setEditForm({
@@ -217,11 +343,22 @@ export default function PaperDetailPage({
     setEditOpen(true);
   };
 
+  /* ── Download ── */
   const handleDownload = async () => {
-    if (!paper) return;
-    try { await paperService.download(paper.id); } catch { /* handled */ }
+    if (!paper?.fileUrl || downloading) return;
+    setDownloading(true);
+
+    // Fire-and-forget counter increment
+    paperService.download(paper.id).catch(() => {});
+
+    try {
+      await triggerDownload(paper.fileUrl, paper.title);
+    } finally {
+      setDownloading(false);
+    }
   };
 
+  /* ── Render guards ── */
   if (isLoading) return <PaperDetailSkeleton />;
 
   if (isError || !paper) {
@@ -238,9 +375,9 @@ export default function PaperDetailPage({
     );
   }
 
-  const isPdf   = paper.fileUrl?.toLowerCase().includes(".pdf");
-  const isImage = paper.fileUrl?.match(/\.(png|jpg|jpeg|gif|webp)$/i);
+  const { isPdf, isImage } = detectFileType(paper.fileUrl, paper.fileType);
 
+  /* ── JSX ── */
   return (
     <motion.div
       initial={{ opacity: 0, y: 18 }}
@@ -269,6 +406,7 @@ export default function PaperDetailPage({
             className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-r from-primary/5 to-violet-50/60 p-4"
           >
             <div className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-primary via-violet-400 to-indigo-400 opacity-60" />
+
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
@@ -277,17 +415,19 @@ export default function PaperDetailPage({
                 <div>
                   <p className="text-[12px] font-bold text-foreground">Admin Controls</p>
                   <p className="text-[10px] text-muted-foreground">
-                    Status: <span className={cn(
+                    Status:{" "}
+                    <span className={cn(
                       "font-semibold",
                       paper.status === "APPROVED" ? "text-emerald-600" :
                       paper.status === "PENDING"  ? "text-amber-600"   : "text-red-600",
-                    )}>{paper.status}</span>
+                    )}>
+                      {paper.status}
+                    </span>
                   </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Approve — only if not already approved */}
                 {paper.status !== "APPROVED" && (
                   <motion.button
                     whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
@@ -302,7 +442,6 @@ export default function PaperDetailPage({
                   </motion.button>
                 )}
 
-                {/* Edit */}
                 <motion.button
                   whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                   onClick={openEdit}
@@ -311,7 +450,6 @@ export default function PaperDetailPage({
                   <Pencil className="h-3.5 w-3.5" /> Edit
                 </motion.button>
 
-                {/* Delete */}
                 <motion.button
                   whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                   onClick={() => setDeleteOpen(true)}
@@ -332,7 +470,6 @@ export default function PaperDetailPage({
         <CardHeader className="pb-4">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-5">
             <div className="space-y-3 flex-1 min-w-0">
-
               {/* Badges */}
               <div className="flex flex-wrap items-center gap-2">
                 <span className={cn(
@@ -364,25 +501,30 @@ export default function PaperDetailPage({
 
               {/* Stats */}
               <div className="flex flex-wrap items-center gap-4 pt-1">
-                <StatBadge icon={Download}      value={paper.downloads ?? 0}           label="downloads"  />
+                <StatBadge icon={Download} value={paper.downloads ?? 0} label="downloads" />
                 {paper.ratingAverage != null && (
-                  <StatBadge icon={Star}        value={paper.ratingAverage.toFixed(1)} label={`(${paper.ratingCount ?? 0} ratings)`} />
+                  <StatBadge
+                    icon={Star}
+                    value={paper.ratingAverage.toFixed(1)}
+                    label={`(${paper.ratingCount ?? 0} ratings)`}
+                  />
                 )}
                 {paper._count?.comments != null && (
-                  <StatBadge icon={MessageSquare} value={paper._count.comments}        label="comments"   />
+                  <StatBadge icon={MessageSquare} value={paper._count.comments} label="comments" />
                 )}
                 {paper._count?.bookmarks != null && (
-                  <StatBadge icon={Bookmark}    value={paper._count.bookmarks}         label="saved"      />
+                  <StatBadge icon={Bookmark} value={paper._count.bookmarks} label="saved" />
                 )}
               </div>
             </div>
 
-            {/* Actions */}
+            {/* Action buttons */}
             <div className="flex flex-wrap gap-2 shrink-0">
               <motion.button
                 whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 onClick={handleDownload}
-                className="relative flex items-center gap-2 h-10 px-5 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold shadow-md shadow-primary/20 hover:bg-primary/90 overflow-hidden transition-colors"
+                disabled={downloading}
+                className="relative flex items-center gap-2 h-10 px-5 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold shadow-md shadow-primary/20 hover:bg-primary/90 overflow-hidden transition-colors disabled:opacity-70"
               >
                 <motion.span
                   className="pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.14] to-transparent"
@@ -390,7 +532,10 @@ export default function PaperDetailPage({
                   animate={{ x: "220%" }}
                   transition={{ duration: 2.2, repeat: Infinity, repeatDelay: 3.5, ease: "easeInOut" }}
                 />
-                <Download className="h-4 w-4" /> Download
+                {downloading
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Download className="h-4 w-4" />}
+                {downloading ? "Downloading…" : "Download"}
               </motion.button>
 
               {isAuthenticated && (
@@ -408,19 +553,25 @@ export default function PaperDetailPage({
         <CardContent className="pt-5 space-y-5">
           {/* Meta grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/40 rounded-2xl border border-border/60">
-            <MetaItem icon={BookOpen}      label="Course"      value={paper.course?.name}      />
-            <MetaItem icon={GraduationCap} label="Program"     value={paper.program?.name}     />
-            <MetaItem icon={Building2}     label="Department"  value={paper.department?.name}  />
-            <MetaItem icon={User}          label="Uploaded by" value={paper.uploadedBy?.name}  />
+            <MetaItem icon={BookOpen}      label="Course"      value={paper.course?.name}     />
+            <MetaItem icon={GraduationCap} label="Program"     value={paper.program?.name}    />
+            <MetaItem icon={Building2}     label="Department"  value={paper.department?.name} />
+            <MetaItem icon={User}          label="Uploaded by" value={paper.uploadedBy?.name} />
           </div>
 
           {/* Detail row */}
           <div className="flex flex-wrap gap-x-6 gap-y-2.5">
-            <DetailItem icon={User}     label="Teacher"  value={paper.teacherName}                                 />
-            <DetailItem icon={Hash}     label="Semester" value={paper.semester}                                    />
-            <DetailItem icon={FileText} label="Type"     value={paper.fileType?.toUpperCase()}                    />
-            <DetailItem icon={Eye}      label="Size"     value={paper.fileSize ? `${(paper.fileSize / 1024 / 1024).toFixed(2)} MB` : null} />
-            <DetailItem icon={Clock}    label="Uploaded" value={formatDate(paper.createdAt)}                       />
+            <DetailItem icon={User}     label="Teacher"  value={paper.teacherName} />
+            <DetailItem icon={Hash}     label="Semester" value={paper.semester} />
+            <DetailItem icon={FileText} label="Type"     value={paper.fileType?.toUpperCase()} />
+            <DetailItem
+              icon={Eye}
+              label="Size"
+              value={paper.fileSize
+                ? `${(paper.fileSize / 1024 / 1024).toFixed(2)} MB`
+                : null}
+            />
+            <DetailItem icon={Clock} label="Uploaded" value={formatDate(paper.createdAt)} />
           </div>
 
           {/* Tags */}
@@ -440,7 +591,7 @@ export default function PaperDetailPage({
         </CardContent>
       </Card>
 
-      {/* ── Preview ── */}
+      {/* ── Preview Card ── */}
       <Card className="border-border shadow-sm overflow-hidden">
         <CardHeader className="pb-3 flex flex-row items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2 text-foreground">
@@ -457,13 +608,10 @@ export default function PaperDetailPage({
             </a>
           )}
         </CardHeader>
+
         <CardContent className="p-0">
           {isPdf ? (
-            <iframe
-              src={paper.fileUrl}
-              className="w-full h-[640px] border-t border-border"
-              title={paper.title}
-            />
+            <PDFViewer url={paper.fileUrl} title={paper.title} />
           ) : isImage ? (
             <div className="flex justify-center p-6 bg-muted/20 border-t border-border">
               <img
@@ -478,13 +626,19 @@ export default function PaperDetailPage({
                 <FileText className="h-8 w-8 text-muted-foreground/30" />
               </div>
               <p className="text-base font-semibold text-foreground mb-1">Preview not available</p>
-              <p className="text-sm text-muted-foreground mb-5">This file type cannot be previewed in the browser.</p>
+              <p className="text-sm text-muted-foreground mb-5">
+                This file type cannot be previewed in the browser.
+              </p>
               <motion.button
                 whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
                 onClick={handleDownload}
-                className="flex items-center gap-2 h-9 px-4 rounded-xl border border-border bg-card text-[13px] font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all shadow-sm"
+                disabled={downloading}
+                className="flex items-center gap-2 h-9 px-4 rounded-xl border border-border bg-card text-[13px] font-medium text-muted-foreground hover:border-primary/40 hover:text-foreground transition-all shadow-sm disabled:opacity-60"
               >
-                <Download className="h-4 w-4" /> Download to view
+                {downloading
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Download className="h-4 w-4" />}
+                {downloading ? "Downloading…" : "Download to view"}
               </motion.button>
             </div>
           )}
@@ -516,6 +670,7 @@ export default function PaperDetailPage({
               <Pencil className="h-4 w-4 text-primary" /> Edit Paper
             </DialogTitle>
           </DialogHeader>
+
           <div className="space-y-4 pt-1">
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-foreground/70">Title</label>
@@ -525,6 +680,7 @@ export default function PaperDetailPage({
                 placeholder="Paper title"
               />
             </div>
+
             <div className="space-y-1.5">
               <label className="text-[12px] font-semibold text-foreground/70">
                 Description <span className="text-muted-foreground/50">(optional)</span>
@@ -541,6 +697,7 @@ export default function PaperDetailPage({
                 )}
               />
             </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <label className="text-[12px] font-semibold text-foreground/70">Year</label>
@@ -575,19 +732,26 @@ export default function PaperDetailPage({
               >
                 Cancel
               </button>
+
               <button
                 onClick={() => updatePaper(editForm)}
                 disabled={!editForm.title.trim() || updating}
                 className="flex-1 h-10 rounded-xl border border-border bg-card text-sm font-semibold text-foreground hover:bg-muted transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-sm"
               >
-                {updating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}
+                {updating
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <Pencil className="h-3.5 w-3.5" />}
                 Save
               </button>
+
               {paper.status !== "APPROVED" && (
                 <button
                   onClick={() => {
                     updatePaper(editForm, {
-                      onSuccess: () => { approvePaper(); setEditOpen(false); },
+                      onSuccess: () => {
+                        approvePaper();
+                        setEditOpen(false);
+                      },
                     });
                   }}
                   disabled={!editForm.title.trim() || updating || approving}
@@ -608,9 +772,12 @@ export default function PaperDetailPage({
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
         <AlertDialogContent className="rounded-2xl border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="font-black text-foreground">Delete this paper?</AlertDialogTitle>
+            <AlertDialogTitle className="font-black text-foreground">
+              Delete this paper?
+            </AlertDialogTitle>
             <AlertDialogDescription className="text-muted-foreground">
-              This will permanently remove <strong>&ldquo;{paper.title}&rdquo;</strong> and its file.
+              This will permanently remove{" "}
+              <strong>&ldquo;{paper.title}&rdquo;</strong> and its file.
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
