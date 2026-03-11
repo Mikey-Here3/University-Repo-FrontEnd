@@ -80,7 +80,8 @@ async function triggerDownload(url: string, filename: string): Promise<void> {
 }
 
 /* ─── File-type detection ────────────────────────────────────── */
-function detectFileType(fileUrl?: string, fileType?: string) {
+// ─── File-type detection ────────────────────────────────────────
+function detectFileType(fileUrl?: string | null, fileType?: string | null) {
   const url  = (fileUrl  ?? "").toLowerCase();
   const type = (fileType ?? "").toLowerCase();
 
