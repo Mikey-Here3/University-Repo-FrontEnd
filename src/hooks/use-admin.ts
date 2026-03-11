@@ -1,6 +1,6 @@
 "use client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { adminService } from "@/services/admin.service";
+import { adminService, type AdminPapersParams } from "@/services/admin.service";
 import { userService } from "@/services/user.service";
 import { reportService } from "@/services/report.service";
 import { toast } from "sonner";
@@ -16,10 +16,10 @@ export function useDashboardStats() {
   });
 }
 
-export function useAdminPapers(params: { page?: number; limit?: number; status?: PaperStatus } = {}) {
+export function useAdminPapers(params: AdminPapersParams = {}) {
   return useQuery({
-    queryKey: ["admin", "papers", params],
-    queryFn: () => adminService.getPapers(params),
+    queryKey: ["admin", "papers", params],  // search/page/status all in cache key
+    queryFn:  () => adminService.getPapers(params),
   });
 }
 
