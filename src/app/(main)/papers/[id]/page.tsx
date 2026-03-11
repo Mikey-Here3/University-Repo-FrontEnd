@@ -119,26 +119,25 @@ function detectFileType(fileUrl?: string | null, fileType?: string | null) {
    when we switch stages instead of just changing src (which
    doesn't reliably re-trigger onLoad/onError).
 ───────────────────────────────────────────────────────────────── */
-type ViewerStage = "native" | "gdocs" | "failed";
-
+type ViewerStage = "gdocs" | "direct" | "failed";
 
 function PDFViewer({ url, title }: { url: string; title: string }) {
-  const [stage,  setStage]  = useState<ViewerStage>("native");
+  const [stage,  setStage]  = useState<ViewerStage>("gdocs");
   const [loaded, setLoaded] = useState(false);
 
-  // For Cloudinary: ensure the URL is the direct resource URL
-  // Google Docs Viewer wraps it as a fallback
-  const gdocsUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
-
-  // For native: if Cloudinary, swap /raw/upload/ → /image/upload/ so
-  // browser treats it as inline PDF, not a download
-  const nativeUrl = url.includes("cloudinary.com") && url.includes("/raw/upload/")
-    ? url.replace("/raw/upload/", "/image/upload/")
+  // Force Cloudinary to serve inline instead of as attachment
+  const inlineUrl = url.includes("cloudinary.com")
+    ? url.replace("/upload/", "/upload/fl_inline/")
     : url;
+
+  const gdocsUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(inlineUrl)}&embedded=true`;
 
   const advanceStage = () => {
     setLoaded(false);
-    setStage((s) => (s === "native" ? "gdocs" : "failed"));
+    setStage((s) => {
+      if (s === "gdocs")  return "direct";
+      return "failed";
+    });
   };
 
   if (stage === "failed") {
@@ -149,29 +148,40 @@ function PDFViewer({ url, title }: { url: string; title: string }) {
         </div>
         <div className="text-center space-y-1">
           <p className="text-sm font-semibold text-foreground">Preview unavailable</p>
-          <p className="text-xs text-muted-foreground">Download the file to view it.</p>
+          <p className="text-xs text-muted-foreground">
+            The file cannot be previewed in browser.
+          </p>
         </div>
-        <a
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          onClick={() => openPdfInNewTab(url)}
           className="flex items-center gap-1.5 h-8 px-4 rounded-lg border border-border bg-card text-[12px] font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
           <Eye className="h-3.5 w-3.5" /> Open PDF in new tab
-        </a>
+        </button>
       </div>
     );
   }
-
-  const src = stage === "native" ? nativeUrl : gdocsUrl;
+/* ─── Open PDF in new tab ────────────────────────────────────────
+   "Open in new tab" on Cloudinary raw URLs triggers a download
+   instead of opening in browser. Fix: use fl_inline transformation
+   to force browser inline rendering, then open that URL.
+───────────────────────────────────────────────────────────────── */
+function openPdfInNewTab(url: string) {
+  // For Cloudinary: inject fl_inline so browser renders instead of downloading
+  const viewUrl = url.includes("cloudinary.com")
+    ? url.replace("/upload/", "/upload/fl_inline/")
+    : url;
+  window.open(viewUrl, "_blank", "noopener,noreferrer");
+}
+  const src = stage === "gdocs" ? gdocsUrl : inlineUrl;
 
   return (
     <div className="relative border-t border-border bg-muted/10">
       {!loaded && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-muted/20 min-h-[200px]">
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-muted/20" style={{ minHeight: 200 }}>
           <Loader2 className="h-7 w-7 animate-spin text-muted-foreground/50" />
           <p className="text-[13px] text-muted-foreground">
-            {stage === "native" ? "Loading preview…" : "Trying alternate viewer…"}
+            {stage === "gdocs" ? "Loading preview…" : "Trying direct viewer…"}
           </p>
         </div>
       )}
