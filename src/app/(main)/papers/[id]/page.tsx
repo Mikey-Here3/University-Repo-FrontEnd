@@ -52,9 +52,18 @@ type EditForm = {
    Fix: fetch() the blob first, create an objectURL, then click it.
    Fallback: window.open if CORS blocks the fetch.
 ───────────────────────────────────────────────────────────────── */
-async function triggerDownload(url: string, filename: string): Promise<void> {
-  // Sanitize filename — keep extension if present
-  const safeName = filename.replace(/[^a-z0-9.\-_\s]/gi, "_").trim() || "download";
+async function triggerDownload(
+  url: string,
+  filename: string,
+  fileType?: string | null,
+): Promise<void> {
+  // Build a clean filename with the correct extension
+  const ext      = (fileType ?? "").toLowerCase().trim();           // e.g. "pdf"
+  const baseName = filename.replace(/[^a-z0-9.\-_\s]/gi, "_").trim() || "download";
+  // Only append extension if the baseName doesn't already end with it
+  const fullName = ext && !baseName.toLowerCase().endsWith(`.${ext}`)
+    ? `${baseName}.${ext}`
+    : baseName;
 
   try {
     const res = await fetch(url, { mode: "cors" });
@@ -62,35 +71,37 @@ async function triggerDownload(url: string, filename: string): Promise<void> {
     const blob      = await res.blob();
     const objectUrl = URL.createObjectURL(blob);
 
-    const a     = document.createElement("a");
-    a.href      = objectUrl;
-    a.download  = safeName;
+    const a         = document.createElement("a");
+    a.href          = objectUrl;
+    a.download      = fullName;          // ← correct filename + extension
     a.style.display = "none";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
 
-    // Clean up object URL after browser has had time to start the download
     setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
   } catch {
-    // CORS fallback — browser will open in new tab; user can Save As
+    // CORS fallback — open directly, browser will prompt Save As
     window.open(url, "_blank", "noopener,noreferrer");
-    toast.info("If download didn't start, use the browser's Save As option.");
+    toast.info("If download didn't start, right-click → Save As.");
   }
 }
 
 /* ─── File-type detection ────────────────────────────────────── */
 // ─── File-type detection ────────────────────────────────────────
 function detectFileType(fileUrl?: string | null, fileType?: string | null) {
-  const url  = (fileUrl  ?? "").toLowerCase();
-  const type = (fileType ?? "").toLowerCase();
+  const type     = (fileType ?? "").toLowerCase().trim();
+  const url      = (fileUrl  ?? "").toLowerCase();
+  const cleanUrl = url.split("?")[0]; // strip query params
 
-  // Strip Cloudinary query params before checking extension
-  const cleanUrl = url.split("?")[0];
+  // Primary: trust the stored fileType from DB
+  if (type === "pdf")  return { isPdf: true,  isImage: false };
+  if (["png","jpg","jpeg","gif","webp","svg"].includes(type))
+                       return { isPdf: false, isImage: true  };
 
-  const isPdf   = cleanUrl.endsWith(".pdf") || type === "pdf";
-  const isImage = /\.(png|jpe?g|gif|webp|svg)$/.test(cleanUrl) ||
-                  ["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(type);
+  // Fallback: check URL extension (works for non-Cloudinary hosts)
+  const isPdf   = cleanUrl.endsWith(".pdf");
+  const isImage = /\.(png|jpe?g|gif|webp|svg)$/.test(cleanUrl);
   return { isPdf, isImage };
 }
 
@@ -345,19 +356,17 @@ export default function PaperDetailPage({
   };
 
   /* ── Download ── */
-  const handleDownload = async () => {
-    if (!paper?.fileUrl || downloading) return;
-    setDownloading(true);
-
-    // Fire-and-forget counter increment
-    paperService.download(paper.id).catch(() => {});
-
-    try {
-      await triggerDownload(paper.fileUrl, paper.title);
-    } finally {
-      setDownloading(false);
-    }
-  };
+ // In handleDownload:
+const handleDownload = async () => {
+  if (!paper?.fileUrl || downloading) return;
+  setDownloading(true);
+  paperService.download(paper.id).catch(() => {});
+  try {
+    await triggerDownload(paper.fileUrl, paper.title, paper.fileType); // ← added paper.fileType
+  } finally {
+    setDownloading(false);
+  }
+};
 
   /* ── Render guards ── */
   if (isLoading) return <PaperDetailSkeleton />;
