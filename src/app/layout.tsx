@@ -1,7 +1,6 @@
-// app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import "./globals.css";
+import "@/styles/globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { Toaster } from "sonner";
@@ -12,28 +11,27 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
-/* ─── Site Config ────────────────────────────────────────────── */
+/* ─── Site Config ───────────────────────────────────────────── */
 const siteConfig = {
   name:        "StudyHouse NUML",
-  url:         "https://studyhouse.online", // ← your real URL
-  ogImage:     "https://studyhouse.online/og-image.png",
-description:
-"Download NUML past papers (Midterm & Final) from 2015–2026. Free previous year papers organized by department, semester and course. No signup required."
+  url:         "https://studyhouse-eight.vercel.app", // ✅ Use your actual URL
+  ogImage:     "https://studyhouse-eight.vercel.app/og-image.png", // ✅ Ensure this image exists
+  description: "Download NUML past papers (Midterm & Final) from 2015–2026. Free previous year papers organized by department, semester and course. No signup required."
+};
+
 /* ─── SEO Metadata ───────────────────────────────────────────── */
 export const metadata: Metadata = {
-  // ✅ metadataBase is REQUIRED for og:image and canonical URLs to work
   metadataBase: new URL(siteConfig.url),
 
   title: {
-default: "NUML Past Papers 2024–2026 | StudyHouse - Midterm & Final Papers Download"
-  template: "%s | StudyHouse NUML",
+    default: "Download NUML Past Papers 2024–2026 | StudyHouse - Midterm & Final Papers",
+    template: "%s | StudyHouse NUML",
   },
 
   description: siteConfig.description,
 
   // ✅ Keywords people actually search on Google
   keywords: [
-    // High intent NUML specific searches
     "NUML past papers",
     "NUML university past papers",
     "NUML previous year papers",
@@ -43,15 +41,11 @@ default: "NUML Past Papers 2024–2026 | StudyHouse - Midterm & Final Papers Dow
     "NUML question papers",
     "NUML study notes",
     "National University of Modern Languages past papers",
-
-    // Department specific
     "NUML CS past papers",
     "NUML IT past papers",
     "NUML BBA past papers",
     "NUML English past papers",
     "NUML MBA past papers",
-
-    // General academic searches
     "university past papers Pakistan",
     "free past papers download",
     "Pakistan university exam resources",
@@ -63,12 +57,10 @@ default: "NUML Past Papers 2024–2026 | StudyHouse - Midterm & Final Papers Dow
   creator:  "StudyHouse NUML",
   publisher: "StudyHouse NUML",
 
-  // ✅ Canonical URL — prevents duplicate content penalty
   alternates: {
     canonical: "/",
   },
 
-  // ✅ Tells Google to index and follow all links
   robots: {
     index:          true,
     follow:         true,
@@ -81,7 +73,6 @@ default: "NUML Past Papers 2024–2026 | StudyHouse - Midterm & Final Papers Dow
     },
   },
 
-  // ✅ Open Graph — shows rich preview on WhatsApp, Facebook, LinkedIn
   openGraph: {
     type:        "website",
     locale:      "en_US",
@@ -99,18 +90,12 @@ default: "NUML Past Papers 2024–2026 | StudyHouse - Midterm & Final Papers Dow
     ],
   },
 
-  // ✅ Twitter/X card
   twitter: {
     card:        "summary_large_image",
     title:       "StudyHouse NUML — Past Papers & Exam Resources",
     description: siteConfig.description,
     images:      [siteConfig.ogImage],
   },
-
-  // ✅ Verification — add these after verifying in Google Search Console
-  // verification: {
-  //   google: "your-google-verification-code",
-  // },
 };
 
 /* ─── Viewport ───────────────────────────────────────────────── */
@@ -120,8 +105,6 @@ export const viewport: Viewport = {
 };
 
 /* ─── JSON-LD Structured Data ────────────────────────────────── */
-// This makes Google show rich results — star ratings, breadcrumbs etc.
-// app/layout.tsx - Add课程-specific schema
 const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
@@ -132,80 +115,60 @@ const jsonLd = {
       "description": "Academic resource platform for NUML students providing past papers, study notes and exam resources",
       "sameAs": [
         "https://github.com/Mikey-Here3",
-        "https://linkedin.com/in/your-linkedin"
+        "https://www.google.com/search?q=StudyHouse+NUML"
       ],
       "contactPoint": {
         "@type": "ContactPoint",
-        "telephone": "+1-555-000-0000",
-        "contactType": "Support",
+        "telephone": "+92-51-111-2222", // ← Add your real phone
+        "contactType": "Customer Support",
         "areaServed": "PK",
         "availableLanguage": ["English", "Urdu"]
       }
     },
     
-    // For each department page, add:
     {
-      "@type": "Course",
-      "name": "Computer Science",
-      "description": "Past papers, study materials and exam resources for NUML Computer Science students",
-      "hasPart": {
-        "@type": "ScholarlyArticle",
-        "name": "CS Past Papers Archive",
-        "url": `${siteConfig.url}/departments/cse`,
-        "about": {
-          "@type": "=",
-          "text": "http://dbpedia.org/resource/Computer_Sci"
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Where can I download NUML past papers?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "You can download free NUML past papers from StudyHouse organized by department, semester and course."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Are NUML midterm and final papers available?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, StudyHouse provides both midterm and final term past papers for all NUML departments."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is registration required to access papers?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "No, StudyHouse allows anonymous paper browsing and downloading without any signup process."
+          }
         }
-      }
-    },
-    
-    // Add Exam paper schema per paper page:
-    {
-      "@type": "Course",
-      "name": "Data Structures 2024",
-      "credentialScale": "Past Paper",
-      "provider": {
-        "@type": "EducationalOrganization",
-        "name": "StudyHouse NUML"
-      }
-    },
-    {
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "Where can I download NUML past papers?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "You can download free NUML past papers from StudyHouse organized by department and semester."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Are NUML midterm and final papers available?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Yes, StudyHouse provides both midterm and final term past papers for NUML students."
-      }
+      ]
     }
-  ]
-}
   ]
 };
 
 /* ─── Root Layout ────────────────────────────────────────────── */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
-        {/* ✅ JSON-LD injected into <head> for Google to read */}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
       <body
-        suppressHydrationWarning
         className={`
           ${inter.variable}
           ${inter.className}
