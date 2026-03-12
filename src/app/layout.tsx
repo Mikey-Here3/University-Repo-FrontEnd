@@ -17,8 +17,8 @@ const siteConfig = {
   name:        "StudyHouse NUML",
   url:         "https://studyhouse.online", // ← your real URL
   ogImage:     "https://studyhouse.online/og-image.png",
-description: "Free past papers, notes, midterm & final term resources for National University of Modern Languages (NUML) students. Browse, search and download past examination papers organized by department, program, semester, year and course.",};
-
+description:
+"Download NUML past papers (Midterm & Final) from 2015–2026. Free previous year papers organized by department, semester and course. No signup required."
 /* ─── SEO Metadata ───────────────────────────────────────────── */
 export const metadata: Metadata = {
   // ✅ metadataBase is REQUIRED for og:image and canonical URLs to work
@@ -168,7 +168,28 @@ const jsonLd = {
         "@type": "EducationalOrganization",
         "name": "StudyHouse NUML"
       }
+    },
+    {
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "Where can I download NUML past papers?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "You can download free NUML past papers from StudyHouse organized by department and semester."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Are NUML midterm and final papers available?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes, StudyHouse provides both midterm and final term past papers for NUML students."
+      }
     }
+  ]
+}
   ]
 };
 
