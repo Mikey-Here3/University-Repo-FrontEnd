@@ -224,7 +224,7 @@ export function SearchCommand({ open, onOpenChange }: Props) {
                       </span>
                     ))}
                   </div>
-                  <span className="text-[11px] text-muted-foreground/50">UniResources</span>
+                  <span className="text-[11px] text-muted-foreground/50">StudyHouse</span>
                 </div>
               </div>
             </motion.div>
