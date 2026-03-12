@@ -112,7 +112,7 @@ const CATS = [
 ];
 
 const TESTI = [
-  { text:"Found my entire semester's papers in minutes. UniResources is absolutely incredible.",      name:"Aisha R.",  role:"CS · Year 3",          stars:5 },
+  { text:"Found my entire semester's papers in minutes. StudyHouse is absolutely incredible.",      name:"Aisha R.",  role:"CS · Year 3",          stars:5 },
   { text:"Saved me weeks of manual searching. Every student at this university needs this platform.", name:"Usman K.",  role:"Engineering · Year 2", stars:5 },
   { text:"The organization is perfect — year, semester, course code, all in one place.",              name:"Fatima N.", role:"Business · Year 4",    stars:5 },
 ];
@@ -799,7 +799,7 @@ export default function HomePage() {
                 className="font-black tracking-tighter leading-[0.86] mb-6 text-foreground"
                 style={{ fontSize: "clamp(3.2rem, 9vw, 7rem)" }}
               >
-                <GT>UniResources</GT>
+                <GT>StudyHouse</GT>
               </motion.h1>
 
               {/* Typewriter */}
