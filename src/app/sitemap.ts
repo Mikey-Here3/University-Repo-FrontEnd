@@ -2,7 +2,7 @@
 import { MetadataRoute } from "next";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const base = "https://studyhouse-eight.vercel.app";
+  const base = "https://studyhouse.online";
   return [
     { url: base,                  lastModified: new Date(), priority: 1.0, changeFrequency: "weekly" },
     { url: `${base}/papers`,      lastModified: new Date(), priority: 0.9, changeFrequency: "daily"  },
