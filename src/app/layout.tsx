@@ -1,36 +1,45 @@
+// app/layout.tsx
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
-import "@/styles/globals.css";
+import "./globals.css";
 import { QueryProvider } from "@/components/providers/query-provider";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { Toaster } from "sonner";
 
+/* ────────────────────────────────────────────────────────────── */
+/* Fonts                                                         */
+/* ────────────────────────────────────────────────────────────── */
 const inter = Inter({
-  subsets:  ["latin"],
-  display:  "swap",
+  subsets: ["latin"],
+  display: "swap",
   variable: "--font-inter",
 });
 
-/* ─── Site Config ───────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────── */
+/* Site Config (SINGLE SOURCE OF TRUTH)                           */
+/* ────────────────────────────────────────────────────────────── */
 const siteConfig = {
-  name:        "StudyHouse NUML",
-  url:         "https://studyhouse-eight.vercel.app", // ✅ Use your actual URL
-  ogImage:     "https://studyhouse-eight.vercel.app/og-image.png", // ✅ Ensure this image exists
-  description: "Download NUML past papers (Midterm & Final) from 2015–2026. Free previous year papers organized by department, semester and course. No signup required."
+  name: "StudyHouse NUML",
+  url: "https://studyhouse.online",
+  ogImage: "https://studyhouse.online/og-image.png",
+  description:
+    "Download NUML past papers (Midterm & Final) from 2015–2026. Free previous year papers organized by department, semester and course. No signup required.",
 };
 
-/* ─── SEO Metadata ───────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────── */
+/* SEO METADATA                                                   */
+/* ────────────────────────────────────────────────────────────── */
 export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
 
   title: {
-    default: "Download NUML Past Papers 2024–2026 | StudyHouse - Midterm & Final Papers",
+    default:
+      "NUML Past Papers 2024–2026 | StudyHouse – Midterm & Final Papers Download",
     template: "%s | StudyHouse NUML",
   },
 
   description: siteConfig.description,
 
-  // ✅ Keywords people actually search on Google
   keywords: [
     "NUML past papers",
     "NUML university past papers",
@@ -39,22 +48,16 @@ export const metadata: Metadata = {
     "NUML final term papers",
     "NUML exam papers",
     "NUML question papers",
-    "NUML study notes",
-    "National University of Modern Languages past papers",
     "NUML CS past papers",
-    "NUML IT past papers",
     "NUML BBA past papers",
     "NUML English past papers",
-    "NUML MBA past papers",
+    "National University of Modern Languages past papers",
     "university past papers Pakistan",
     "free past papers download",
-    "Pakistan university exam resources",
-    "academic resources for students",
-    "past papers Pakistan",
   ],
 
-  authors:  [{ name: "StudyHouse NUML" }],
-  creator:  "StudyHouse NUML",
+  authors: [{ name: "StudyHouse NUML" }],
+  creator: "StudyHouse NUML",
   publisher: "StudyHouse NUML",
 
   alternates: {
@@ -62,113 +65,117 @@ export const metadata: Metadata = {
   },
 
   robots: {
-    index:          true,
-    follow:         true,
+    index: true,
+    follow: true,
     googleBot: {
-      index:               true,
-      follow:              true,
-      "max-video-preview": -1,
+      index: true,
+      follow: true,
       "max-image-preview": "large",
-      "max-snippet":       -1,
+      "max-snippet": -1,
     },
   },
 
   openGraph: {
-    type:        "website",
-    locale:      "en_US",
-    url:         siteConfig.url,
-    title:       "StudyHouse NUML — Past Papers, Notes & Exam Resources",
+    type: "website",
+    url: siteConfig.url,
+    title: "NUML Past Papers | StudyHouse",
     description: siteConfig.description,
-    siteName:    "StudyHouse NUML",
+    siteName: "StudyHouse NUML",
     images: [
       {
-        url:    siteConfig.ogImage,
-        width:  1200,
+        url: siteConfig.ogImage,
+        width: 1200,
         height: 630,
-        alt:    "StudyHouse NUML — Past Papers & Academic Resources",
+        alt: "NUML Past Papers – StudyHouse",
       },
     ],
   },
 
   twitter: {
-    card:        "summary_large_image",
-    title:       "StudyHouse NUML — Past Papers & Exam Resources",
+    card: "summary_large_image",
+    title: "NUML Past Papers | StudyHouse",
     description: siteConfig.description,
-    images:      [siteConfig.ogImage],
+    images: [siteConfig.ogImage],
   },
 };
 
-/* ─── Viewport ───────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────── */
+/* VIEWPORT                                                       */
+/* ────────────────────────────────────────────────────────────── */
 export const viewport: Viewport = {
-  themeColor:  [{ color: "#f5f3ff" }],
+  themeColor: [{ color: "#f5f3ff" }],
   colorScheme: "light",
 };
 
-/* ─── JSON-LD Structured Data ────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────── */
+/* JSON‑LD STRUCTURED DATA (GOOGLE VALID)                          */
+/* ────────────────────────────────────────────────────────────── */
 const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
     {
       "@type": "EducationalOrganization",
-      "name": "StudyHouse NUML",
-      "url": siteConfig.url,
-      "description": "Academic resource platform for NUML students providing past papers, study notes and exam resources",
-      "sameAs": [
+      "@id": `${siteConfig.url}/#organization`,
+      name: "StudyHouse NUML",
+      url: siteConfig.url,
+      description:
+        "Free academic resource platform for NUML students providing past papers, midterm and final exam resources.",
+      address: {
+        "@type": "PostalAddress",
+        addressCountry: "PK",
+      },
+      sameAs: [
         "https://github.com/Mikey-Here3",
-        "https://www.google.com/search?q=StudyHouse+NUML"
       ],
-      "contactPoint": {
-        "@type": "ContactPoint",
-        "telephone": "+92-51-111-2222", // ← Add your real phone
-        "contactType": "Customer Support",
-        "areaServed": "PK",
-        "availableLanguage": ["English", "Urdu"]
-      }
     },
-    
     {
       "@type": "FAQPage",
-      "mainEntity": [
+      mainEntity: [
         {
           "@type": "Question",
-          "name": "Where can I download NUML past papers?",
-          "acceptedAnswer": {
+          name: "Where can I download NUML past papers?",
+          acceptedAnswer: {
             "@type": "Answer",
-            "text": "You can download free NUML past papers from StudyHouse organized by department, semester and course."
-          }
+            text:
+              "You can download NUML past papers for all departments from StudyHouse, organized by semester and course.",
+          },
         },
         {
           "@type": "Question",
-          "name": "Are NUML midterm and final papers available?",
-          "acceptedAnswer": {
+          name: "Are NUML midterm and final papers available?",
+          acceptedAnswer: {
             "@type": "Answer",
-            "text": "Yes, StudyHouse provides both midterm and final term past papers for all NUML departments."
-          }
+            text:
+              "Yes, StudyHouse provides both NUML midterm and final term past papers completely free.",
+          },
         },
-        {
-          "@type": "Question",
-          "name": "Is registration required to access papers?",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "No, StudyHouse allows anonymous paper browsing and downloading without any signup process."
-          }
-        }
-      ]
-    }
-  ]
+      ],
+    },
+  ],
 };
 
-/* ─── Root Layout ────────────────────────────────────────────── */
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/* ────────────────────────────────────────────────────────────── */
+/* ROOT LAYOUT                                                    */
+/* ────────────────────────────────────────────────────────────── */
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* JSON‑LD for Google */}
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(jsonLd),
+          }}
         />
       </head>
+
       <body
+        suppressHydrationWarning
         className={`
           ${inter.variable}
           ${inter.className}
@@ -179,21 +186,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <QueryProvider>
           <AuthProvider>
             {children}
+
             <Toaster
               position="top-right"
               richColors
-              expand={false}
               closeButton
               toastOptions={{
                 classNames: {
-                  toast:       "!bg-white !border !border-violet-100 !text-slate-800 !shadow-xl !shadow-violet-100/50 !rounded-2xl",
-                  title:       "!text-slate-800 !font-semibold",
-                  description: "!text-slate-500",
-                  closeButton: "!bg-violet-50 !border !border-violet-200 !text-violet-400 hover:!text-violet-600",
-                  success:     "!border-emerald-200 !bg-emerald-50",
-                  error:       "!border-red-200 !bg-red-50",
-                  warning:     "!border-amber-200 !bg-amber-50",
-                  info:        "!border-blue-200 !bg-blue-50",
+                  toast:
+                    "!bg-white !border !border-violet-100 !text-slate-800 !shadow-xl !rounded-2xl",
+                  title: "!font-semibold",
                 },
               }}
             />
