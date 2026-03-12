@@ -15,10 +15,9 @@ const inter = Inter({
 /* ─── Site Config ────────────────────────────────────────────── */
 const siteConfig = {
   name:        "StudyHouse NUML",
-  url:         "https://studyhouse-eight.vercel.app", // ← your real URL
-  ogImage:     "https://studyhouse-eight.vercel.app/og-image.png",
-  description: "Free past papers, notes, midterm & final term resources for NUML university students. Download previous year question papers organized by department, course and semester.",
-};
+  url:         "https://studyhouse.online", // ← your real URL
+  ogImage:     "https://studyhouse.online/og-image.png",
+description: "Free past papers, notes, midterm & final term resources for National University of Modern Languages (NUML) students. Browse, search and download past examination papers organized by department, program, semester, year and course.",};
 
 /* ─── SEO Metadata ───────────────────────────────────────────── */
 export const metadata: Metadata = {
