@@ -25,8 +25,8 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
 
   title: {
-    default:  "StudyHouse NUML — Past Papers, Notes & Exam Resources",
-    template: "%s | StudyHouse NUML",
+default: "NUML Past Papers 2024–2026 | StudyHouse - Midterm & Final Papers Download"
+  template: "%s | StudyHouse NUML",
   },
 
   description: siteConfig.description,
@@ -121,61 +121,55 @@ export const viewport: Viewport = {
 
 /* ─── JSON-LD Structured Data ────────────────────────────────── */
 // This makes Google show rich results — star ratings, breadcrumbs etc.
+// app/layout.tsx - Add课程-specific schema
 const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
-    // ✅ Website entity
     {
-      "@type":           "WebSite",
-      "@id":             `${siteConfig.url}/#website`,
-      url:               siteConfig.url,
-      name:              "StudyHouse NUML",
-      description:       siteConfig.description,
-      inLanguage:        "en-US",
-      potentialAction: {
-        "@type":       "SearchAction",
-        target: {
-          "@type": "EntryPoint",
-          urlTemplate: `${siteConfig.url}/search?q={search_term_string}`,
-        },
-        "query-input": "required name=search_term_string",
-      },
-    },
-
-    // ✅ Organization entity
-    {
-      "@type":       "Organization",
-      "@id":         `${siteConfig.url}/#organization`,
-      name:          "StudyHouse NUML",
-      url:           siteConfig.url,
-      logo: {
-        "@type": "ImageObject",
-        url:     `${siteConfig.url}/logo.png`,
-      },
-      description:   "Free academic resource platform for NUML university students",
-      address: {
-        "@type":           "PostalAddress",
-        addressCountry:    "PK",
-        addressLocality:   "Islamabad",
-      },
-      sameAs: [
+      "@type": "EducationalOrganization",
+      "name": "StudyHouse NUML",
+      "url": siteConfig.url,
+      "description": "Academic resource platform for NUML students providing past papers, study notes and exam resources",
+      "sameAs": [
         "https://github.com/Mikey-Here3",
+        "https://linkedin.com/in/your-linkedin"
       ],
+      "contactPoint": {
+        "@type": "ContactPoint",
+        "telephone": "+1-555-000-0000",
+        "contactType": "Support",
+        "areaServed": "PK",
+        "availableLanguage": ["English", "Urdu"]
+      }
     },
-
-    // ✅ EducationalOrganization — perfect schema type for your site
+    
+    // For each department page, add:
     {
-      "@type":       "EducationalOrganization",
-      name:          "StudyHouse NUML",
-      url:           siteConfig.url,
-      description:   "Academic resource repository for NUML students",
-      educationalCredentialAwarded: "Past Papers, Study Notes, Exam Resources",
-      address: {
-        "@type":         "PostalAddress",
-        addressCountry:  "PK",
-      },
+      "@type": "Course",
+      "name": "Computer Science",
+      "description": "Past papers, study materials and exam resources for NUML Computer Science students",
+      "hasPart": {
+        "@type": "ScholarlyArticle",
+        "name": "CS Past Papers Archive",
+        "url": `${siteConfig.url}/departments/cse`,
+        "about": {
+          "@type": "=",
+          "text": "http://dbpedia.org/resource/Computer_Sci"
+        }
+      }
     },
-  ],
+    
+    // Add Exam paper schema per paper page:
+    {
+      "@type": "Course",
+      "name": "Data Structures 2024",
+      "credentialScale": "Past Paper",
+      "provider": {
+        "@type": "EducationalOrganization",
+        "name": "StudyHouse NUML"
+      }
+    }
+  ]
 };
 
 /* ─── Root Layout ────────────────────────────────────────────── */
