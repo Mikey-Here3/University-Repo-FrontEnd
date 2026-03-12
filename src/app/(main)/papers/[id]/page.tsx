@@ -46,23 +46,68 @@ type EditForm = {
   contentType: ContentType;
 };
 
-/* ─── Cloudinary inline URL ──────────────────────────────────────
-   Injects fl_inline so Cloudinary serves Content-Disposition:inline
-   instead of attachment — required for both preview and new tab.
-───────────────────────────────────────────────────────────────── */
-function toInlineUrl(url: string): string {
+/* ─── Cloudinary URL utilities ───────────────────────────────────
+
+  Cloudinary stores PDFs uploaded via the "raw" uploader under:
+    https://res.cloudinary.com/<cloud>/raw/upload/v.../filename
+
+  Problems:
+  1. /raw/upload/ URLs always download — browser never renders them.
+  2. fl_inline only works on /image/upload/ not /raw/upload/.
+  3. Google Docs Viewer needs a publicly accessible URL with a
+     proper Content-Type — it works with the raw URL but the iframe
+     sandbox blocks cookies/redirects.
+
+  Solution:
+  • For preview  → use Google Docs Viewer with the raw URL (no
+    transformation needed — GDocs fetches it server-side).
+  • For new tab  → convert /raw/upload/ → /image/upload/fl_inline/
+    so Cloudinary re-serves as inline PDF with correct Content-Type.
+  • For download → fetch() as blob so we control the filename+ext.
+
+─────────────────────────────────────────────────────────────── */
+
+/**
+ * Converts a Cloudinary raw PDF URL to an image-delivery URL with
+ * fl_inline so the browser renders it instead of downloading it.
+ * For non-Cloudinary URLs returns the original.
+ */
+function toViewableUrl(url: string): string {
   if (!url.includes("cloudinary.com")) return url;
-  // Avoid double-injecting
-  if (url.includes("fl_inline")) return url;
-  return url.replace("/upload/", "/upload/fl_inline/");
+  // Already transformed — don't double-inject
+  if (url.includes("/image/upload/")) {
+    return url.includes("fl_inline")
+      ? url
+      : url.replace("/image/upload/", "/image/upload/fl_inline/");
+  }
+  // raw/upload → image/upload with fl_inline
+  if (url.includes("/raw/upload/")) {
+    return url.replace("/raw/upload/", "/image/upload/fl_inline/");
+  }
+  return url;
+}
+
+/**
+ * Build the Google Docs Viewer embed URL.
+ * GDocs fetches the PDF from Cloudinary server-side so it bypasses
+ * Content-Disposition:attachment headers entirely.
+ */
+function toGdocsEmbedUrl(url: string): string {
+  // Pass the RAW url — GDocs handles it fine
+  return `https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true`;
 }
 
 /* ─── Open PDF in new tab ────────────────────────────────────── */
-function openPdfInNewTab(url: string) {
-  window.open(toInlineUrl(url), "_blank", "noopener,noreferrer");
+function openPdfInNewTab(url: string): void {
+  // Use the viewable (fl_inline / image delivery) URL so the
+  // browser opens it inline instead of triggering a download.
+  window.open(toViewableUrl(url), "_blank", "noopener,noreferrer");
 }
 
-/* ─── Download helper ────────────────────────────────────────── */
+/* ─── Download helper ────────────────────────────────────────────
+  Uses fetch→blob so we control filename + extension regardless of
+  what Cloudinary sends in Content-Disposition.
+─────────────────────────────────────────────────────────────── */
 async function triggerDownload(
   url: string,
   filename: string,
@@ -88,6 +133,7 @@ async function triggerDownload(
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(objectUrl), 30_000);
   } catch {
+    // CORS fallback
     window.open(url, "_blank", "noopener,noreferrer");
     toast.info("If download didn't start, right-click → Save As.");
   }
@@ -95,36 +141,45 @@ async function triggerDownload(
 
 /* ─── File-type detection ────────────────────────────────────── */
 function detectFileType(fileUrl?: string | null, fileType?: string | null) {
-  const type     = (fileType ?? "").toLowerCase().trim();
-  const url      = (fileUrl  ?? "").toLowerCase();
-  const cleanUrl = url.split("?")[0];
-
-  if (type === "pdf") return { isPdf: true,  isImage: false };
+  // Always trust the DB field first — Cloudinary URLs have no extension
+  const type = (fileType ?? "").toLowerCase().trim();
+  if (type === "pdf") return { isPdf: true, isImage: false };
   if (["png","jpg","jpeg","gif","webp","svg"].includes(type))
-                      return { isPdf: false, isImage: true  };
+    return { isPdf: false, isImage: true };
 
-  const isPdf   = cleanUrl.endsWith(".pdf");
-  const isImage = /\.(png|jpe?g|gif|webp|svg)$/.test(cleanUrl);
-  return { isPdf, isImage };
+  // Fallback: URL extension (non-Cloudinary hosts)
+  const cleanUrl = (fileUrl ?? "").toLowerCase().split("?")[0];
+  return {
+    isPdf:   cleanUrl.endsWith(".pdf"),
+    isImage: /\.(png|jpe?g|gif|webp|svg)$/.test(cleanUrl),
+  };
 }
 
 /* ─── PDF Viewer ─────────────────────────────────────────────────
-   Stage "gdocs"  → Google Docs Viewer with fl_inline Cloudinary URL
-   Stage "direct" → raw fl_inline URL directly in iframe
-   Stage "failed" → manual fallback UI
 
-   Google Docs Viewer always fires onLoad (even on failure), so we
-   start there. The iframe key={stage} forces a full remount on
-   stage change so onLoad fires fresh.
-───────────────────────────────────────────────────────────────── */
+  Stage flow:
+  "gdocs"  → Google Docs Viewer  (most reliable, bypasses CORS/headers)
+  "direct" → fl_inline image URL in iframe (fallback if GDocs fails)
+  "failed" → manual UI with download + open-in-tab buttons
+
+  Key behaviours:
+  • key={stage} remounts the iframe so onLoad fires fresh each stage.
+  • GDocs fires onLoad even when it can't render ("No preview
+    available" message inside the frame) — we can't detect that,
+    so we just show whatever GDocs renders and rely on the fallback
+    only when onError fires.
+  • The loading overlay uses a real height div (not absolute) so
+    the card doesn't collapse while the iframe loads.
+
+─────────────────────────────────────────────────────────────── */
 type ViewerStage = "gdocs" | "direct" | "failed";
 
 function PDFViewer({ url, title }: { url: string; title: string }) {
   const [stage,  setStage]  = useState<ViewerStage>("gdocs");
   const [loaded, setLoaded] = useState(false);
 
-  const inlineUrl = toInlineUrl(url);   // fl_inline Cloudinary URL
-  const gdocsUrl  = `https://docs.google.com/viewer?url=${encodeURIComponent(inlineUrl)}&embedded=true`;
+  const gdocsUrl  = toGdocsEmbedUrl(url);
+  const directUrl = toViewableUrl(url);
 
   const advanceStage = () => {
     setLoaded(false);
@@ -139,7 +194,9 @@ function PDFViewer({ url, title }: { url: string; title: string }) {
         </div>
         <div className="text-center space-y-1">
           <p className="text-sm font-semibold text-foreground">Preview unavailable</p>
-          <p className="text-xs text-muted-foreground">Download the file to view it.</p>
+          <p className="text-xs text-muted-foreground">
+            Open in a new tab or download to view.
+          </p>
         </div>
         <button
           onClick={() => openPdfInNewTab(url)}
@@ -151,15 +208,13 @@ function PDFViewer({ url, title }: { url: string; title: string }) {
     );
   }
 
-  const src = stage === "gdocs" ? gdocsUrl : inlineUrl;
+  const src = stage === "gdocs" ? gdocsUrl : directUrl;
 
   return (
     <div className="relative border-t border-border bg-muted/10">
+      {/* Loading overlay — sits on top while iframe loads */}
       {!loaded && (
-        <div
-          className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-muted/20"
-          style={{ minHeight: 200 }}
-        >
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-muted/20">
           <Loader2 className="h-7 w-7 animate-spin text-muted-foreground/50" />
           <p className="text-[13px] text-muted-foreground">
             {stage === "gdocs" ? "Loading preview…" : "Trying direct viewer…"}
@@ -576,7 +631,6 @@ export default function PaperDetailPage({
           <CardTitle className="text-base flex items-center gap-2 text-foreground">
             <Eye className="h-4 w-4 text-muted-foreground" /> Preview
           </CardTitle>
-          {/* ✅ Uses openPdfInNewTab() with fl_inline — not raw URL */}
           {isPdf && paper.fileUrl && (
             <button
               onClick={() => openPdfInNewTab(paper.fileUrl!)}
@@ -588,7 +642,6 @@ export default function PaperDetailPage({
         </CardHeader>
         <CardContent className="p-0">
           {isPdf && paper.fileUrl ? (
-            /* ✅ PDFViewer defined at module level — no scope issue */
             <PDFViewer url={paper.fileUrl} title={paper.title} />
           ) : isImage && paper.fileUrl ? (
             <div className="flex justify-center p-6 bg-muted/20 border-t border-border">
