@@ -69,7 +69,7 @@ function SidebarContent() {
             <GraduationCap className="relative h-4 w-4 text-primary" />
           </div>
           <span className="text-[14px] font-semibold text-foreground">
-            Uni<span className="text-muted-foreground">Resources</span>
+            Study<span className="text-muted-foreground">House</span>
           </span>
         </div>
         <motion.button
