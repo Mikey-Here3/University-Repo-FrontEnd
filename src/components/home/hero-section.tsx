@@ -142,7 +142,7 @@ export function HeroSection() {
               className="font-black tracking-tighter leading-[0.86] mb-6 text-foreground"
               style={{ fontSize:"clamp(3.2rem,9vw,7rem)" }}
             >
-              <GT>UniResources</GT>
+              <GT>StudyHouse</GT>
             </motion.h1>
 
             {/* Typewriter */}
