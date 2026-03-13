@@ -28,8 +28,8 @@ const CONTACT_INFO = [
   {
     icon: Mail,
     label: "Email",
-    value: "support@uniresources.com",
-    href: "mailto:support@uniresources.com",
+    value: "contact@studyhouse.online",
+    href: "mailto:contact@studyhouse.online",
     gradient: "from-violet-500 to-indigo-500",
     shadow:   "shadow-violet-500/20",
     ring:     "ring-violet-500/20",
@@ -40,8 +40,8 @@ const CONTACT_INFO = [
   {
     icon: Phone,
     label: "Phone",
-    value: "+1 (555) 000-0000",
-    href: "tel:+15550000000",
+    value: "+92 (319) 079-9711",
+    href: "tel:+923190799711",
     gradient: "from-cyan-500 to-blue-500",
     shadow:   "shadow-cyan-500/20",
     ring:     "ring-cyan-500/20",
