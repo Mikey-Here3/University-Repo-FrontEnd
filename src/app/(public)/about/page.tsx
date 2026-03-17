@@ -24,7 +24,7 @@ const TEAM = [
   },
   {
     id:      "2",
-    name:    "Umair",
+    name:    "Malik M.Umair",
     role:    "UI & Backend Developer",
     bio:     "Designed interface components and built the data layer — PostgreSQL schema design and RESTful API integration.",
     accent:  { bg:"bg-cyan-100", text:"text-cyan-600", ring:"ring-cyan-200", dot:"bg-cyan-500" },
@@ -33,7 +33,7 @@ const TEAM = [
   },
   {
     id:      "3",
-    name:    "Sara Khan",
+    name:    "Sohaib Kayani",
     role:    "Content & Documentation",
     bio:     "Led content strategy, academic data collection, and wrote the platform documentation to ensure quality and accuracy across the archive.",
     accent:  { bg:"bg-emerald-100", text:"text-emerald-600", ring:"ring-emerald-200", dot:"bg-emerald-500" },
